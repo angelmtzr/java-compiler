@@ -25,8 +25,8 @@ This project is designed to provide developers with a comprehensive tool for wri
    git clone https://github.com/your-username/mylang-compiler.git
 2. Open IntelliJ IDEA and select "File" -> "Open" and choose the project directory.
 3. Set up the project SDK to use JDK 21 or later:
-  - Navigate to "File" -> "Project Structure".
-  - Under "Project", set the "Project SDK" to JDK 21 or later.
+     - Navigate to "File" -> "Project Structure".
+     - Under "Project", set the "Project SDK" to JDK 21 or later.
 
 ### Running the Code Editor
 1. Open the Main class in IntelliJ IDEA.
