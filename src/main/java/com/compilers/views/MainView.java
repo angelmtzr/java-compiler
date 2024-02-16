@@ -34,7 +34,6 @@ public class MainView extends JFrame {
         topPanel.add(new JScrollPane(codeEditor));
         topPanel.add(new JScrollPane(infoPanel));
         add(topPanel);
-
         // Output console
         outputConsole = new OutputConsole();
         add(new JScrollPane(outputConsole));

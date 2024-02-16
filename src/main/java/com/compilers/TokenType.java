@@ -16,7 +16,6 @@ public enum TokenType {
     // Escape sequences not allowed yet
     STRING("\"[^\"]+\""), // No empty strings or special character \" allowed
     CHAR("'.'"), // No empty chars or special character \' allowed
-    //IGNORED(""),
     ERROR(null);
 
     public final String regex;

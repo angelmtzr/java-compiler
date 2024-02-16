@@ -2,6 +2,8 @@ package com.compilers;
 
 import java.util.Vector;
 
+import static com.compilers.TokenType.*;
+
 public final class Lexer {
     public static final String[] KEYWORDS = {
             "if",
@@ -30,131 +32,132 @@ public final class Lexer {
             "long"
 
     };
+    private final static Vector<Token> tokens = new Vector<>();
+    private static final Word word = new Word();
 
-    public static void main(String[] args) {
-        var input = "\"hola\" \"hola\"";
-
-        System.out.println(tokenize(input));
-    }
-
-    public static Vector<Token> tokenize(String text) {
-        var tokens = new Vector<Token>();
-
-        text = text.replace("\t", "\s\s"); // Substitute tabs with whitespaces
-
-        var lines = text.split("\r\n|\n|\n\n"); // All possible line separators (depends on OS)
-
-
+    public static Vector<Token> tokenize(String str) {
         var lineNum = 1;
-        var str = new StringBuilder();
-        var doubleQuotesOpen = false;
-        var singleQuotesOpen = false;
-        for (var line : lines) {
+        tokens.setSize(0);
+        for (var line : str.split("(\r\n)|\n")) {
             for (var c : line.toCharArray()) {
+                // HANDLE NON-SPECIAL BEHAVIOR CHARS
+                if (isNotSpecialBehaviorChar(c)) {
+                    word.append(c);
+                    continue;
+                }
+                // HANDLE SPECIAL BEHAVIOR CHARS
                 if (isDoubleQuote(c)) {
-                    // Double quotes can be inside single quotes
-                    if (singleQuotesOpen) {
-                        str.append(c);
+                    // Double quotes inside single quotes
+                    if (word.hasOpenQuotes(QuoteType.SINGLE)) {
+                        word.append(c);
                         continue;
                     }
-                    // Incoming closing quotes
-                    if (doubleQuotesOpen) {
-                        str.append(c); // append closing quotes
-                        tokens.add(new Token(lineNum, identifyToken(str.toString()), str.toString()));
-                        str = new StringBuilder(); // reset string
-                        doubleQuotesOpen = false; // set flag to closed quotes
-                        continue; // next character
+                    // Opening double quotes case
+                    if (!word.hasOpenQuotes(QuoteType.DOUBLE)) {
+                        if (word.isNotEmpty()) {
+                            tokens.add(new Token(lineNum, word.getTokenType(), word.getVal()));
+                        }
+                        word.openQuotes(QuoteType.DOUBLE);
                     }
-                    // Incoming opening quotes
-                    //  First classify previous string (if any)
-                    if (!str.isEmpty()) {
-                        tokens.add(new Token(lineNum, identifyToken(str.toString()), str.toString()));
-                        str = new StringBuilder();
+                    // Closing double quotes case
+                    else {
+                        word.closeQuotes(QuoteType.DOUBLE);
+                        tokens.add(
+                                new Token(
+                                        lineNum,
+                                        word.isValid(STRING) ? STRING : ERROR,
+                                        word.getVal()
+                                )
+                        );
+                        word.clear();
                     }
-                    str.append(c);
-                    doubleQuotesOpen = true;
+                    // Next char
                     continue;
                 }
                 if (isSingleQuote(c)) {
-                    // Single quotes can be inside double quotes
-                    if (doubleQuotesOpen) {
-                        str.append(c);
+                    // Single quotes inside double quotes
+                    if (word.hasOpenQuotes(QuoteType.DOUBLE)) {
+                        word.append(c);
                         continue;
                     }
-                    // Incoming closing quotes
-                    if (singleQuotesOpen) {
-                        str.append(c); // append closing quotes
-                        tokens.add(new Token(lineNum, identifyToken(str.toString()), str.toString()));
-                        str = new StringBuilder(); // reset string
-                        singleQuotesOpen = false; // set flag to closed quotes
-                        continue; // next character
+                    // Opening single quotes case
+                    if (!word.hasOpenQuotes(QuoteType.SINGLE)) {
+                        if (word.isNotEmpty()) {
+                            tokens.add(new Token(lineNum, word.getTokenType(), word.getVal()));
+                        }
+                        word.openQuotes(QuoteType.SINGLE);
                     }
-                    // Incoming opening double quotes
-                    //  First classify previous string (if any)
-                    if (!str.isEmpty()) {
-                        tokens.add(new Token(lineNum, identifyToken(str.toString()), str.toString()));
-                        str = new StringBuilder();
+                    // Closing single quotes case
+                    else {
+                        word.closeQuotes(QuoteType.SINGLE);
+                        tokens.add(
+                                new Token(
+                                        lineNum,
+                                        word.isValid(CHAR) ? CHAR : ERROR,
+                                        word.getVal()
+                                )
+                        );
+                        word.clear();
                     }
-                    str.append(c);
-                    singleQuotesOpen = true;
+                    // Next char
                     continue;
                 }
-                if (isDelimiter(c) || isOperator(c) || isWhitespace(c) || isHash(c)) {
-                    // Append normally if quotes open
-                    if (doubleQuotesOpen || singleQuotesOpen) {
-                        str.append(c);
-                        continue;
-                    }
-                    // Scientific notation
-                    // If string appending a sign and number is a FLOAT then the sign is for FLOAT
-                    if ((c == '+' || c == '-') && identifyToken(str + "+1") == TokenType.FLOAT) {
-                        str.append(c);
-                        continue;
-                    }
-                    // If hash (comment indicator) break to next line
-                    if (isHash(c)) {
-                        break;
-                    }
-                    // Classify previous string (if any)
-                    if (!str.isEmpty()) {
-                        tokens.add(new Token(lineNum, identifyToken(str.toString()), str.toString()));
-                    }
-                    // Classify word separator (except spaces)
-                    if (!isWhitespace(c)) {
-                        tokens.add(new Token(lineNum, identifyToken(String.valueOf(c)), String.valueOf(c)));
-                    }
-                    str = new StringBuilder(); // Reset string
+                // Special behavior chars inside quotes are non-special
+                if (word.hasOpenAnyQuotes()) {
+                    word.append(c);
                     continue;
                 }
-                // Any other character is appended normally
-                str.append(c);
+                // Line comment char will break to next line
+                if (isLineCommentChar(c)) {
+                    break;
+                }
+                // The "+-" signs could be for scientific notation (e.g. 3.2e+1)
+                if (isSign(c) && word.isPotentialFloat()) {
+                    word.append(c);
+                    continue;
+                }
+                // Classify word previous to separator char (if not empty)
+                if (word.isNotEmpty()) {
+                    tokens.add(new Token(lineNum, word.getTokenType(), word.getVal()));
+                }
+                // Classify word separator (except spaces and tabs)
+                if (isNotWhitespaceOrTab(c)) {
+                    var separator = new Word(c);
+                    tokens.add(
+                            new Token(
+                                    lineNum,
+                                    separator.getTokenType(),
+                                    separator.getVal()
+                            )
+                    );
+                }
+                word.clear();
             }
-            // Classify word left when line ends (if any)
-            if (!str.isEmpty())
-                tokens.add(new Token(lineNum, identifyToken(str.toString()), str.toString()));
-            // New line, new string
-            str = new StringBuilder();
-            doubleQuotesOpen = false;
-            singleQuotesOpen = false;
+            // Add pending word and create new word when line ends
+            if (word.isNotEmpty()) {
+                tokens.add(new Token(lineNum, word.getTokenType(), word.getVal()));
+            }
+            word.reset();
             lineNum++;
         }
+
         return tokens;
     }
 
-    private static TokenType identifyToken(String str) {
-        for (var tokenType : TokenType.values()) {
-            if (tokenType.regex == null)
-                continue;
-
-            var regex = tokenType.regex;
-            if (str.matches(regex)) {
-                return tokenType;
-            }
-        }
-        return TokenType.ERROR;
+    private static boolean isNotSpecialBehaviorChar(char c) {
+        return isNotOperator(c) &&
+                isNotDelimiter(c) &&
+                isNotWhitespaceOrTab(c) &&
+                !isSingleQuote(c) &&
+                !isDoubleQuote(c) &&
+                !isLineCommentChar(c);
     }
 
-    private static boolean isHash(char c) {
+    private static boolean isSign(char c) {
+        return c == '+' || c == '-';
+    }
+
+    private static boolean isLineCommentChar(char c) {
         return c == '#';
     }
 
@@ -166,15 +169,15 @@ public final class Lexer {
         return c == '"';
     }
 
-    private static boolean isWhitespace(char c) {
-        return c == ' ';
+    private static boolean isNotWhitespaceOrTab(char c) {
+        return c != ' ' && c != '\t';
     }
 
-    private static boolean isOperator(char c) {
-        return String.valueOf(c).matches(TokenType.OPERATOR.regex);
+    private static boolean isNotOperator(char c) {
+        return !String.valueOf(c).matches(TokenType.OPERATOR.regex);
     }
 
-    private static boolean isDelimiter(char c) {
-        return String.valueOf(c).matches(TokenType.DELIMITER.regex);
+    private static boolean isNotDelimiter(char c) {
+        return !String.valueOf(c).matches(TokenType.DELIMITER.regex);
     }
 }
